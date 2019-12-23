@@ -52,36 +52,3 @@ Rev_Rev_Primer_V_replaced = Rev_Rev_Primer_H_replaced.replace("V", "b")
 Rev_Rev_Primer_comp = Rev_Rev_Primer_V_replaced
 
 print("The reverse compliment sequence of the reverse primer to be added to the end of forward primer is "+ Rev_Rev_Primer_comp.upper())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
