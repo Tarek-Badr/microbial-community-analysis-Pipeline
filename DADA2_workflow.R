@@ -1,7 +1,5 @@
 if (!requireNamespace("BiocManager", quietly = TRUE))
   install.packages("BiocManager")
-if (!requireNamespace("BiocManager", quietly=TRUE))
-  install.packages("BiocManager")
 BiocManager::install("dada2", version = "3.9")
 
 library(dada2); packageVersion("dada2")
@@ -11,17 +9,15 @@ library(gridExtra)
 library(phyloseq)
 library(DECIPHER)
 library(phangorn)
-library(phyloseq); packageVersion("phyloseq")
 library(Biostrings); packageVersion("Biostrings")
 library(ggplot2); packageVersion("ggplot2")
 library(dendextend)
 
-setwd("C:/Users/Lenovo R2G/Desktop/")
-getwd()
-
-path <- "C:/Users/Lenovo R2G/Desktop/DADA2/MiSeq_SOP"
+setwd("C:/Users/ngs-adm/Desktop/INTeGRATE-ALL/0-INTEGRATE-Analysis")
+path <- "C:/Users/ngs-adm/Desktop/INTeGRATE-ALL/00-Final Ilumina Analysis/0-Samples_1-50_merged_Fastq"
 
 list.files(path)
+
 
 # assign Forward and reverse fastq files
 fnFs <- sort(list.files(path, pattern="_R1.fastq", full.names = TRUE))
@@ -48,9 +44,10 @@ names(filtRs) <- sample.names
 #!!!!watch out with trunclen, reads have to overlap at the end, standard script was 250,200 you havr to try out, for our primer pair V3-V4 (Amplicon size of 460bp i went with 280,230 after many trials) 
 #!!!!maxEE can be eased maxEE=c(2,5) if too many read are lost because of low quality
 
-out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(280,230),
-                     maxN=0, maxEE=c(2,2), truncQ=2, rm.phix=TRUE,
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(230,230),
+                     maxN=0, maxEE=c(2,5), truncQ=2, rm.phix=TRUE,
                      compress=TRUE, multithread=FALSE) # On Windows set multithread=FALSE
+
 head(out)
 
 plotQualityProfile(filtFs)
@@ -64,7 +61,7 @@ errR <- learnErrors(filtRs, multithread=FALSE)
 plotErrors(errF, nominalQ=TRUE)
 plotErrors(errR, nominalQ=TRUE)
 
-# apply the core sample inference algorithm to the dereplicated data.
+# apply the DADA2 algorithm to the dereplicated data.
 
 dadaFs <- dada(filtFs, err=errF, multithread=FALSE)
 dadaRs <- dada(filtRs, err=errR, multithread=FALSE)
@@ -89,14 +86,9 @@ dim(seqtab)
 
 # Inspect distribution of sequence lengths
 table(nchar(getSequences(seqtab)))
-
-#Considerations for your own data: Sequences that are much longer or shorter than expected may be the result of non-specific priming. 
-#You can remove non-target-length sequences from your sequence table. This is analogous to "cutting a band" in-silico to get amplicons of the targeted lengt
-seqtab2 <- seqtab[,nchar(colnames(seqtab)) %in% 288:460]  #our v3-v4 amplicon should be 460 bp
+seqtab2 <- seqtab[,nchar(colnames(seqtab)) %in% 300:387]
 table(nchar(getSequences(seqtab2)))
 
-#Remove chimeras
-#repeat weíth seqtab2!!!!!!!!!!!!!!!!
 
 seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=FALSE, verbose=TRUE)
 dim(seqtab.nochim)
@@ -106,125 +98,56 @@ sum(seqtab.nochim)/sum(seqtab)
 
 getN <- function(x) sum(getUniques(x))
 track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab.nochim))
-# If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
-colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
-rownames(track) <- sample.names
-head(track)
-
 Pipeline_Track = head(track)
-write.csv(Pipeline_Track, file = "Pipeline_Track.csv")
+write.csv(track, file = "Pipeline_Track_final.csv")
+write.csv(sample.names, file = "sample.names.csv")
 
 ################################
 #Assign taxonomy
 ################################
-# Choosing your Taxonomic reference dataset is really crucial in assigning the right Species. 
-# You Should try with different Datasets until finding the right one suitable for your samples
-# Here i tried with Silva version 132, RDP trainset 16, and GTDB: Genome Taxonomy Database 
 
-ref_fasta = "C:/Users/Lenovo R2G/Desktop/DADA2/MiSeq_SOP/silva_nr_v132_train_set.fa.gz"
-taxa <- assignTaxonomy(seqtab.nochim, "C:/Users/Lenovo R2G/Desktop/DADA2/MiSeq_SOP/silva_nr_v132_train_set.fa.gz", multithread=False)
-taxa.print <- taxa # Removing sequence rownames for display only
-rownames(taxa.print) <- NULL
-head(taxa.print)
+ref_fasta = "C:/Users/ngs-adm/Desktop/R/DADA2/MiSeq_SOP/GTDB_bac120_arc122_ssu_r202_fullTaxo.fa.gz"
 
-taxa_species = addSpecies(taxa,"C:/Users/Lenovo R2G/Desktop/DADA2/Silva/Silva.nr_v132/silva_species_assignment_v132.fa")
-taxa.print_s <- taxa_species # Removing sequence rownames for display only
-rownames(taxa.print_s) <- NULL
-head(taxa.print_s)
+taxa_GTDB <- assignTaxonomy(seqtab.nochim, ref_fasta,tryRC = TRUE )
 
-###############Assign Taxa with RDP
-
-taxa_RDP <- assignTaxonomy(seqtab.nochim, "C:/Users/Lenovo R2G/Desktop/DADA2/MiSeq_SOP/rdp_train_set_16.fa.gz")
-taxa.print_RDP  <- taxa_RDP # Removing sequence rownames for display only
-rownames(taxa.print_RDP ) <- NULL
-head(taxa.print_RDP)
-
-taxa_species_RDP = addSpecies(taxa_RDP,"C:/Users/Lenovo R2G/Desktop/DADA2/MiSeq_SOP/rdp_species_assignment_16.fa.gz")
-taxa.print_spp_RDP <- taxa_species_RDP # Removing sequence rownames for display only
-rownames(taxa.print_spp_RDP) <- NULL
-head(taxa.print_spp_RDP)
-
-genus.species_RDP <- assignSpecies(taxa_RDP, "C:/Users/Lenovo R2G/Desktop/DADA2/MiSeq_SOP/rdp_species_assignment_16.fa.gz")
-unname(genus.species_RDP)
-
-##################################Assign Taxa with GTDB
-
-taxa_GTDB <- assignTaxonomy(seqtab.nochim, "C:/Users/Lenovo R2G/Desktop/DADA2/MiSeq_SOP/GTDB_bac-arc_ssu_r86.fa.gz")
 unname(taxa_GTDB)
-taxa.print_GTDB  <- taxa_GTDB # Removing sequence rownames for display only
+
+taxa.print_GTDB  <- taxa_GTDB 
+
 rownames(taxa.print_GTDB ) <- NULL
+
 head(taxa.print_GTDB)
 
-taxa_species_GTDB = addSpecies(taxa_GTDB,"C:/Users/Lenovo R2G/Desktop/DADA2/MiSeq_SOP/GTDB_dada2_assignment_species.fa.gz", allowMultiple=TRUE)
-taxa.print_spp_GTDB  <- taxa_species_GTDB  # Removing sequence rownames for display only
+ref_fasta_species = "C:/Users/ngs-adm/Desktop/R/DADA2/MiSeq_SOP/GTDB_bac120_arc122_ssu_r202_Species.fa.gz"
+
+taxa_species_GTDB = addSpecies(taxa_GTDB,ref_fasta_species, allowMultiple=TRUE)
+
+taxa.print_spp_GTDB  <- taxa_species_GTDB 
+
 rownames(taxa.print_spp_GTDB ) <- NULL
+
 head(taxa.print_spp_GTDB )
 
 ##################################
-
 #Creating Output files from DADA2
-
+##################################
 asv_seqs <- colnames(seqtab.nochim)
 asv_headers <- vector(dim(seqtab.nochim)[2], mode="character")
-
 for (i in 1:dim(seqtab.nochim)[2]) {
   asv_headers[i] <- paste(">ASV", i, sep="_")
 }
 
 # making and writing out a fasta of our final ASV seqs:
-
-asv_fasta_2802230 <- c(rbind(asv_headers, asv_seqs))
-
-write(asv_fasta_2802230, "ASVs_280230.fa")
-
+asv_fasta_230_GTDB <- c(rbind(asv_headers, asv_seqs))
+write(asv_fasta_230_GTDB, "asv_fasta_230_GTDB.fa")
 # count table:
-
-asv_tab_2802230 <- t(seqtab.nochim)
-row.names(asv_tab_2802230) <- sub(">", "", asv_headers)
-write.table(asv_tab_2802230, "ASVs_counts_2802230.tsv", sep="\t", quote=F, col.names=NA)
-
+asv_tab_230_GTDB <- t(seqtab.nochim)
+row.names(asv_tab_230_GTDB) <- sub(">", "", asv_headers)
+write.table(asv_tab_230_GTDB, "ASVs_counts_230_GTDB.tsv", sep="\t", quote=F, col.names=NA)
 # tax table:
-
-asv_tax_2802230 <- taxa
-row.names(asv_tax_2802230) <- sub(">", "", asv_headers)
-write.table(asv_tax_2802230, "ASVs_taxonomy_2802230.tsv", sep="\t", quote=F, col.names=NA)
-
-############ASV file with GTDB
-
-asv_tax_GTDB <- taxa.print_GTDB
-row.names(asv_tax_GTDB) <- sub(">", "", asv_headers)
-write.table(asv_tax_GTDB, "ASVs_taxonomy_GTDB.tsv", sep="\t", quote=F, col.names=NA)
-
-#######################################################
-#Alternatives: The DECIPHER IdTaxa taxonomic classification method  (i think the prior Method to assign Taxonomy is better)
-#######################################################
-
-library(DECIPHER); packageVersion("DECIPHER")
-dna_2 <- DNAStringSet(getSequences(seqtab.nochim)) # Create a DNAStringSet from the ASVs
-#Load a training object
-#SILVA_SSU_r138_2019.RData  #SILVA_SSU_r132_March2018.RData  #RDP_v16-mod_March2018.RData
-load("C:/Users/Lenovo R2G/Desktop/DADA2/MiSeq_SOP/GTDB_r89-mod_June2019.RData")
-
-#load("C:/Users/Lenovo R2G/Desktop/DADA2/Silva/SILVA_SSU_r138_2019.RData") 
-
-ids_r138 <- IdTaxa(dna_2, trainingSet, strand="top", processors=NULL) # use all processors
-print(ids_GTDB)
-plot(ids_GTDB)
-plot(ids_GTDB, trainingSet)
-print(ids_r138)
-plot(ids_r138)
-
-ranks <- c("domain", "phylum", "class", "order", "family", "genus", "species") # ranks of interest
-# Convert the output object of class "Taxa" to a matrix analogous to the output from assignTaxonomy
-
-taxid <- t(sapply(ids, function(x) {
-  m <- match(ranks, x$rank)
-  taxa <- x$taxon[m]
-  taxa[startsWith(taxa, "unclassified_")] <- NA
-  taxa
-}))
-colnames(taxid) <- ranks; rownames(taxid) <- getSequences(seqtab.nochim)
-taxa <- taxid 
+asv_tax_230_GTDB <- taxa_GTDB
+row.names(asv_tax_230_GTDB) <- sub(">", "", asv_headers)
+write.table(asv_tax_230_GTDB, "ASVs_taxonomy_230_GTDB.tsv", sep="\t", quote=F, col.names=NA)
 
 ###################Analysis with DESEq2
 #We read the output files from DADA2 and the sample information file
@@ -232,10 +155,8 @@ taxa <- taxid
 
 count_tab <- read.table("ASVs_counts.tsv", header=T, row.names=1,
                         check.names=F, sep="\t")
-
 tax_tab <- as.matrix(read.table("ASVs_taxonomy_GTDB.tsv", header=T,
                                 row.names=1, check.names=F, sep="\t"))
-
 tax_tab_RDP <- as.matrix(read.table("ASVs_taxonomy_RDP.tsv", header=T,
                                 row.names=1, check.names=F, sep="\t"))
 
@@ -246,52 +167,34 @@ sample_info_tab <- samdf
 ###################################
 
 deseq_counts <- DESeqDataSetFromMatrix(count_tab, colData = sample_info_tab, design = ~Protocol) 
-
 #deseq_counts_vst <- varianceStabilizingTransformation(deseq_counts)
-
 deseq_counts <- estimateSizeFactors(deseq_counts, type = "poscounts")
 deseq_counts_vst <- varianceStabilizingTransformation(deseq_counts)
 vst_trans_count_tab <- assay(deseq_counts_vst)
-
 #############################
 #clustering
 #############################
-
 euc_dist <- dist(t(vst_trans_count_tab))
 euc_clust <- hclust(euc_dist, method="ward.D2")
 plot(euc_clust) 
-
 
 ################################
 #Phyloseq
 ################################
 #Rarefaction curves
 ################################
-
 library(vegan)
-
 rarecurve(t(count_tab), step=100, lwd=2, ylab="ASVs", label=F)
-
-# and adding a vertical line at the fewest seqs in any sample
-
 abline(v=(min(rowSums(t(count_tab)))))
-
 ########################################
 #Richness and diversity estimates
 ########################################
 
-# first we need to create a phyloseq object using our un-transformed count table
-
 count_tab_phy <- otu_table(count_tab, taxa_are_rows=T)
-tax_tab_phy <- tax_table(tax_tab)    #here based on the GTDB database (we can retry it for RDP or SILVA)
+tax_tab_phy <- tax_table(tax_tab)  
 ASV_physeq <- phyloseq(count_tab_phy, tax_tab_phy, sample_info_tab_phy)
 
-# and now we can call the plot_richness() function on our phyloseq object
-
 plot_richness(ASV_physeq, color="Protocol", title = "Alpha Diversity", measures=c("Chao1", "Shannon", "Simpson")) 
-
-# Transform data to proportions as appropriate for Bray-Curtis distances
-
 ASV_physeq.prop <- transform_sample_counts(ASV_physeq, function(otu) otu/sum(otu))
 ASV_physeq.nmds.bray <- ordinate(ASV_physeq.prop, method="NMDS", distance="bray")     
 plot_ordination(ASV_physeq.prop, ord.nmds.bray, label = "Protocol" , title="Bray NMDS")
@@ -303,49 +206,16 @@ plot_ordination(ASV_physeq.prop, ord.nmds.bray, label = "Protocol" , title="Bray
 #We now construct a phyloseq object directly from the dada2 outputs.
 
 dna <- Biostrings::DNAStringSet(taxa_names(ASV_physeq))
-
 names(dna) <- taxa_names(ASV_physeq)
-
 ps_GTDB <- merge_phyloseq(ASV_physeq, dna)
 taxa_names(ps_GTDB) <- paste0("ASV", seq(ntaxa(ps_GTDB)))
 ps_GTDB
 
 #########################################################################################
-#Bar plos
-#########################################################################################
 
-top20 <- names(sort(taxa_sums(ps_GTDB), decreasing=TRUE))[1:20]  # adjust number to wished top ones
-ps.top20 <- transform_sample_counts(ps_GTDB, function(OTU) OTU/sum(OTU))
-ps.top20 <- prune_taxa(top20, ps.top20)
-plot_bar(ps.top20, fill="Species")  #Family in SILVA, family in Decipher
-
-top50 <- names(sort(taxa_sums(ps_GTDB), decreasing=TRUE))[1:50]
-ps.top50 <- transform_sample_counts(ps_GTDB, function(OTU) OTU/sum(OTU))
-ps.top50 <- prune_taxa(top50, ps.top50)
-
-plot_bar(ps.top50, fill="Genus")  #Family in SILVA, family in Decipher #Family/ Genus / Species etc,....
-
-############################################################################
-#Heat Maps
-############################################################################
-
-theme_set(theme_bw())
-rank_names(ps.top50)
-
-plot_heatmap(ps.top50, sample.label="Protocol","Family")
-
-plot_heatmap(ps.top50, sample.label = "Protocol", taxa.label = "Genus", low = "#000033",
-             high = "#FF3300", na.value = "black",
-             max.label = 250, title = "Heatmap of top 50 Genus (GTDB)", sample.order = NULL, taxa.order = "Genus",
-             first.sample = NULL, first.taxa = NULL)
-
-plot_heatmap(ps.top50, taxa.label = "Species", low = "#000033",
-             high = "#FF3300", na.value = "black",
-             max.label = 250, title = "Heatmap of top 50 Species (GTDB)")
-
-heatmap(otu_table(ps.top50))
 
                      ###########################################################################
-                                            #Hope you found this useful
+                                            #Hope this was useful to you#
+                                                  ##Tarek Badr##
                      ###########################################################################               
  
