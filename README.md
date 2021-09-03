@@ -1,6 +1,6 @@
 # microbial-community-analysis-Pipeline
 
-Copyright Mohamed Tarek Badr , Date: 27 oct 2020
+Copyright Mohamed Tarek Badr , Date: 03 August 2021
 University of Freiberg Germany 
 
 This code was used for the analysis of 16srDNA sequencing samples from the INTeGRATE clinical study.
